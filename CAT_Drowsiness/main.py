@@ -8,11 +8,25 @@ import csv
 import winsound
 import math
 
+import requests
+
+BACKEND_URL = "http://192.168.1.18:5000/api/alert"  # Replace with your backend's IP and port
+
+def send_alert_to_backend(data):
+    try:
+        response = requests.post(BACKEND_URL, json=data, timeout=2)
+        print("Sent to backend:", response.status_code)
+    except Exception as e:
+        print("Error sending to backend:", e)
+
+# Example usage:
+# send_alert_to_backend({"type": "drowsiness", "score": score, "timestamp": time.time()})
+
 mp_face_mesh = mp.solutions.face_mesh
 
 
-EAR_THRESHOLD = 0.25
-CONSEC_FRAMES = 20
+EAR_THRESHOLD = 0.28
+CONSEC_FRAMES = 15
 MAR_THRESHOLD = 0.7  # Mouth aspect ratio threshold for yawn detection
 YAWN_CONSEC_FRAMES = 15
 BLINK_CONSEC_FRAMES = 3
@@ -159,14 +173,19 @@ def main():
                 if score >= 0.7:
                     alert_msgs.append("DROWSINESS ALERT!")
                     fatigue_alert = True
+                    send_alert_to_backend({"text": "DROWSINESS ALERT!"})
                 if drowsy_counter >= CONSEC_FRAMES:
                     alert_msgs.append("EYES CLOSED!")
+                    send_alert_to_backend({"text": "EYES CLOSED!"})
                 if yawn_counter >= YAWN_CONSEC_FRAMES:
                     alert_msgs.append("YAWNING DETECTED!")
+                    send_alert_to_backend({"text": "YAWNING DETECTED!"})
                 if neutral_head_pitch is not None and nodding:
                     alert_msgs.append("HEAD NODDING!")
+                    send_alert_to_backend({"text": "HEAD NODDING!"})
                 if blinks_per_min > BLINKS_PER_MIN_THRESHOLD:
                     alert_msgs.append("EXCESSIVE BLINKING!")
+                    send_alert_to_backend({"text": "EXCESSIVE BLINKING!"})
 
                 y_offset = 60
                 for msg in alert_msgs:
