@@ -5,6 +5,18 @@ import threading
 import pandas as pd
 import os
 
+import requests
+
+BACKEND_URL = "http://192.168.1.18:5000/api/proxy"  # Replace with your backend's IP and port
+
+def send_alert_to_backend(data):
+    try:
+        response = requests.post(BACKEND_URL, json=data, timeout=2)
+        print("Sent to backend:", response.status_code)
+    except Exception as e:
+        print("Error sending to backend:", e)
+
+
 PROXIMITY_LOG_FILE = 'proximity_simulation_log.csv'
 
 PROXIMITY_COLUMNS = [
@@ -51,6 +63,7 @@ def simulate_proximity_entry(engine_on):
         direction = None
         danger_level = 'NONE'
         alert = False
+    # Send alert to backend if danger level is HIGH
     return {
         'timestamp': timestamp,
         'engine_on': engine_on,
@@ -78,12 +91,24 @@ def proximity_simulation_loop(stop_event):
         save_proximity_log(df)
         if entry['danger_level'] == 'HIGH':
             print(f"\n🚨 DANGER: Object detected VERY CLOSE ({entry['proximity_distance_m']}m, {entry['direction']})! Alert triggered!\n")
+            mes = "🚨 DANGER: Object detected VERY CLOSE "+str(entry['proximity_distance_m'])+" "+entry['direction']+"! Alert triggered!"
+            entry['message'] = mes
+            send_alert_to_backend(entry)
         elif entry['danger_level'] == 'MEDIUM':
             print(f"⚠️  Warning: Object detected nearby ({entry['proximity_distance_m']}m, {entry['direction']}). Stay alert.")
+            mes = "⚠️  Warning: Object detected nearby "+str(entry['proximity_distance_m'])+" "+entry['direction']+". Stay alert."
+            entry['message'] = mes
+            send_alert_to_backend(entry)
         elif entry['danger_level'] == 'LOW':
             print(f"Safe: No immediate danger. Closest object at {entry['proximity_distance_m']}m, {entry['direction']}.")
+            mes = "Safe: No immediate danger. Closest object at "+str(entry['proximity_distance_m'])+" "+entry['direction']+"."
+            entry['message'] = mes
+            send_alert_to_backend(entry)
         else:
             print("Engine is OFF. Proximity monitoring paused.")
+            mes = "Engine is OFF. Proximity monitoring paused."
+            entry['message'] = mes
+            send_alert_to_backend(entry)
         time.sleep(1)
 
 def main():

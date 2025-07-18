@@ -1,3 +1,23 @@
+import requests
+
+BACKEND_URL = "http://192.168.1.18:5000/api/moni"  # Replace with your backend's IP and port
+
+def send_alert_to_backend(data):
+    try:
+        response = requests.post(BACKEND_URL, json=data, timeout=2)
+        print("Sent to backend:", response.status_code)
+    except Exception as e:
+        print("Error sending to backend:", e)
+
+BACKEND_URL2 = "http://192.168.1.18:5000/api/anomaly" 
+
+def send_alert_to_back(data):
+    try:
+        response = requests.post(BACKEND_URL2, json=data, timeout=2)
+        print("Sent to backend:", response.status_code)
+    except Exception as e:
+        print("Error sending to backend:", e)
+        
 def get_latest_engine_state(log_file='seatbelt_simulation_log.csv'):
     try:
         df = pd.read_csv(log_file)
@@ -41,38 +61,44 @@ all_cols = np.load('model_columns.npy', allow_pickle=True).tolist()
 
 # Simulate a single sensor row (random realistic values)
 def generate_sensor_row():
-    return {
-        'Engine_Temperature': random.uniform(70, 110),
-        'Fuel_Level': random.uniform(0, 100),
-        'Fuel_Pressure': random.uniform(20, 70),
-        'Water_in_Fuel': random.uniform(0, 10),
-        'Engine_Oil_Pressure': random.uniform(15, 80),
-        'Engine_RPM': random.uniform(300, 3500),
-        'Hydraulic_Oil_Temp': random.uniform(50, 120),
-        'Hydraulic_Pressure': random.uniform(10, 100),
-        'Transmission_Oil_Temp': random.uniform(60, 140),
-        'Brake_Pressure': random.uniform(0, 100),
-        'Coolant_Temperature': random.uniform(70, 115),
-        'Air_Filter_Pressure_Drop': random.uniform(0, 5),
-        'Battery_Voltage': random.uniform(10.5, 15.5),
-        'PTO_RPM': random.uniform(0, 1000),
-        'Engine_Load': random.uniform(0, 100),
-        'Exhaust_Temperature': random.uniform(100, 250),
+    data = {
+        'Engine_Temperature': round(random.uniform(70, 110), 2),
+        'Fuel_Level': round(random.uniform(0, 100), 2),
+        'Fuel_Pressure': round(random.uniform(20, 70), 2),
+        'Water_in_Fuel': round(random.uniform(0, 10), 2),
+        'Engine_Oil_Pressure': round(random.uniform(15, 80), 2),
+        'Engine_RPM': round(random.uniform(300, 3500), 2),
+        'Hydraulic_Oil_Temp': round(random.uniform(50, 120), 2),
+        'Hydraulic_Pressure': round(random.uniform(10, 100), 2),
+        'Transmission_Oil_Temp': round(random.uniform(60, 140), 2),
+        'Brake_Pressure': round(random.uniform(0, 100), 2),
+        'Coolant_Temperature': round(random.uniform(70, 115), 2),
+        'Air_Filter_Pressure_Drop': round(random.uniform(0, 5), 2),
+        'Battery_Voltage': round(random.uniform(10.5, 15.5), 2),
+        'PTO_RPM': round(random.uniform(0, 1000), 2),
+        'Engine_Load': round(random.uniform(0, 100), 2),
+        'Exhaust_Temperature': round(random.uniform(100, 250), 2),
         'Transmission_Gear_State': random.randint(1, 6),
         'Machine_Operating_Mode': random.randint(0, 1)
     }
+    send_alert_to_backend(data)
+    return data
 
 # Anomaly classifier (simple rules, can be extended)
 def classify_anomaly(pred):
     # pred is denormalized, in same order as all_cols
     pred_dict = dict(zip(all_cols, pred))
     if pred_dict.get('Engine_Temperature', 0) > 105:
+        #send_alert_to_back({"anomaly": "Engine Overheating", "value": pred_dict.get('Engine_Temperature', 0)})
         return "Engine Overheating"
     if pred_dict.get('Fuel_Level', 100) < 10:
+        #send_alert_to_back({"anomaly": "Low Fuel", "value": pred_dict.get('Fuel_Level', 100)})
         return "Low Fuel"
     if pred_dict.get('Engine_RPM', 0) > 3200:
+        #send_alert_to_back({"anomaly": "RPM Surge", "value": pred_dict.get('Engine_RPM', 0)})
         return "RPM Surge"
     if pred_dict.get('Brake_Pressure', 100) < 10:
+        #send_alert_to_back({"anomaly": "Brake Failure Risk", "value": pred_dict.get('Brake_Pressure', 100)})
         return "Brake Failure Risk"
     # Add more rules as needed
     return None
@@ -129,13 +155,17 @@ def run_realtime_simulation(window_size=30, interval=1, avg_window=15):
                 anomaly_percents.append(percent)
                 if len(anomaly_percents) > avg_window:
                     anomaly_percents.pop(0)
-                print(f"Anomaly likelihood: {percent:.1f}% (MSE: {mse:.5f}, max_MSE_scale: {max(rolling_max_mse):.5f})")
+                print(f"Anomaly likelihood: {percent:.1f}%")
                 if percent >= 80:
-                    print(f"\n🚨 HIGH WARNING: Anomaly likelihood is very high!\n")
-                if classify_anomaly(pred):
-                    print(f"\n🚨 WARNING: {classify_anomaly(pred)} predicted in the near future!\n")
+                    print("\n🚨 HIGH WARNING: Anomaly likelihood is very high!\n")
+                    send_alert_to_back({"anomaly": "High Anomaly Likelihood", "likelihood_percent": percent})
+                anomaly_type = classify_anomaly(pred)
+                if anomaly_type:
+                    send_alert_to_back({"anomaly": anomaly_type, "likelihood_percent": percent})
+                    print(f"\n🚨 WARNING: {anomaly_type} predicted in the near future!\n")
                 else:
                     print(f"No anomaly predicted in the next step. (Likelihood: {percent:.1f}%)")
+                    send_alert_to_back({"anomaly": "No anomaly predicted in the next step.", "likelihood_percent": percent})
                 tick += 1
                 if tick % avg_window == 0:
                     avg_percent = sum(anomaly_percents) / len(anomaly_percents)

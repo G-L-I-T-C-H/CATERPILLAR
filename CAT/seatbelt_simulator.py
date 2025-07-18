@@ -8,6 +8,17 @@ import sys
 if sys.platform == 'win32':
     import winsound
 
+import requests
+
+BACKEND_URL = "http://192.168.1.18:5000/api/ess"  # Replace with your backend's IP and port
+
+def send_alert_to_backend(data):
+    try:
+        response = requests.post(BACKEND_URL, json=data, timeout=2)
+        print("Sent to backend:", response.status_code)
+    except Exception as e:
+        print("Error sending to backend:", e)
+
 LOG_FILE = 'seatbelt_simulation_log.csv'
 MACHINE_ID = 'EXC001'
 OPERATOR_ID = 'OP1001'
@@ -37,6 +48,12 @@ def generate_entry():
     seatbelt_status = 'Fastened' if seatbelt_fastened else 'Unfastened'
     # Safety alert only if engine_on is True and seatbelt is Unfastened
     safety_alert = (engine_on is True) and seatbelt_status == 'Unfastened'
+    entry = {
+        'engine_on': engine_on,
+        'seatbelt_status': seatbelt_status,
+        'safety_alert_triggered': safety_alert
+    }
+    send_alert_to_backend(entry)
     return {
         'timestamp': timestamp,
         'machine_id': MACHINE_ID,
@@ -77,6 +94,10 @@ def simulation_loop(stop_event, pause_event):
                 engine_on_val = engine_on
             seatbelt_status = override_next['seatbelt_status'] if override_next['seatbelt_status'] is not None else ('Fastened' if random.random() < 0.9 else 'Unfastened')
             safety_alert = (engine_on_val is True) and seatbelt_status == 'Unfastened'
+            send_alert_to_backend({
+        'engine_on': engine_on,
+        'seatbelt_status': seatbelt_status,
+        'safety_alert_triggered': safety_alert})
             entry = {
                 'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'machine_id': MACHINE_ID,
@@ -129,7 +150,7 @@ def manual_override(pause_event):
 
     # Seatbelt status override
     while True:
-        new_seatbelt = input("Override next 10 entries: Seatbelt status [FASTENED/UNFASTENED or Enter to skip]: ")
+        new_seatbelt = input("Override next 20 entries: Seatbelt status [FASTENED/UNFASTENED or Enter to skip]: ")
         if not new_seatbelt:
             new_seatbelt_val = None
             break
